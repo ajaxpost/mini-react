@@ -12,27 +12,43 @@ function createDom(fiber) {
     fiber.type === 'TEXT_ELEMENT'
       ? document.createTextNode('')
       : document.createElement(fiber.type);
-
   updateDom(dom, {}, fiber.props);
   return dom;
 }
-
+const isProtype = (key) => key !== 'children';
+const isEvent = (key) => key.startsWith('on');
+const isNew = (key) => (prevProps, nextProps) =>
+  prevProps[key] !== nextProps[key];
 function updateDom(dom, prevProps, nextProps) {
-  const isProtype = (key) => key !== 'children';
-  const isEvent = (key) => key.startsWith('on');
   // 添加属性
   Object.keys(nextProps)
     .filter(isProtype)
+    .filter(isNew(prevProps, nextProps))
     .forEach((key) => {
       dom[key] = nextProps[key];
     });
   // 添加事假监听器
   Object.keys(nextProps)
-    .filter(isProtype)
     .filter(isEvent)
+    .filter(isNew(prevProps, nextProps))
     .forEach((key) => {
       const eventType = key.substring(2).toLocaleLowerCase();
       dom.addEventListener(eventType, nextProps[key]);
+    });
+  // 移除属性
+  Object.keys(prevProps)
+    .filter(isProtype)
+    .filter((key) => !(key in nextProps))
+    .forEach((key) => {
+      dom[key] = '';
+    });
+  // 移除事件监听器
+  Object.keys(prevProps)
+    .filter(isEvent)
+    .filter((key) => !(key in nextProps) || isNew(key))
+    .forEach((key) => {
+      const eventType = key.substring(2).toLocaleLowerCase();
+      dom.removeEventListener(eventType, prevProps[key]);
     });
 }
 
@@ -43,8 +59,12 @@ function commitRoot() {
 
 function commitWork(fiber) {
   if (!fiber) return;
-  const domParent = fiber.parent.dom;
+  let domParentFiber = fiber.parent;
+  while (!domParentFiber.dom) {
+    domParentFiber = domParentFiber.parent;
+  }
 
+  const domParent = domParentFiber.dom;
   domParent.appendChild(fiber.dom);
   commitWork(fiber.child);
   commitWork(fiber.sibling);
@@ -71,12 +91,15 @@ function workLoop(deadline) {
 requestIdleCallback(workLoop);
 
 function performUnitOfWork(fiber) {
-  if (!fiber.dom) {
-    fiber.dom = createDom(fiber);
+  const isFunctionComponent = fiber.type instanceof Function;
+  if (isFunctionComponent) {
+    // 函数组件执行逻辑
+    updateFunctionComponent(fiber);
+  } else {
+    // 普通jsx执行逻辑
+    updateHostComponent(fiber);
   }
-  const elements = fiber.props.children;
-  // 然后需要对当前树结构生成对应的fiber结构
-  reconcileChildren(fiber, elements);
+
   if (fiber.child) {
     return fiber.child;
   }
@@ -90,6 +113,20 @@ function performUnitOfWork(fiber) {
     }
     newFiber = newFiber.parent;
   }
+}
+
+function updateFunctionComponent(fiber) {
+  const element = fiber.type(fiber.props);
+  reconcileChildren(fiber, [element]);
+}
+
+function updateHostComponent(fiber) {
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber);
+  }
+  const elements = fiber.props.children;
+  // 然后需要对当前树结构生成对应的fiber结构
+  reconcileChildren(fiber, elements);
 }
 
 function reconcileChildren(wipFiber, elements) {
