@@ -1,17 +1,25 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-import App from './App';
-import reportWebVitals from './reportWebVitals';
+import Didact from './mini-react/didact';
+import DidactDom from './mini-react/didact-dom';
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+/** @jsx Didact.createElement **/
+const element = (
+  <div>
+    <h1>标题1</h1>
+    <p>
+      <a href="/">a标签</a>
+    </p>
+    <b>
+      <span>
+        <a href="/">1010</a>
+      </span>
+    </b>
+    <input
+      onInput={() => {
+        console.log(123);
+      }}
+    />
+  </div>
 );
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-reportWebVitals();
+const root = document.getElementById('root');
+DidactDom.render(element, root);
