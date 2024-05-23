@@ -196,6 +196,7 @@ function updateHostComponent(fiber) {
 function reconcileChildren(wipFiber, elements) {
   let index = 0; // 索引
   let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
+  console.log(wipFiber);
   let prevSibling = null; // 上一个兄弟fiber
   while (index < elements.length || oldFiber != null) {
     const element = elements[index];
