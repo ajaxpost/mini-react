@@ -1,30 +1,23 @@
-import Didact from './mini-react/didact';
-import DidactDom from './mini-react/didact-dom';
-
-// const element = (
-//   <div>
-//     <h1>标题1</h1>
-//     <p>
-//       <a href="/">a标签</a>
-//     </p>
-//     <b>
-//       <span>
-//         <a href="/">1010</a>
-//       </span>
-//     </b>
-//     <input
-//       onInput={() => {
-//         console.log(123);
-//       }}
-//     />
-//   </div>
-// );
+import Didact from "./mini-react/didact";
+import DidactDom from "./mini-react/didact-dom";
 
 const App = (props) => {
-  return <div>App {props.name}</div>;
+  const [count, setCount] = Didact.useState(1);
+
+  return (
+    <div
+      className="app"
+      onClick={() => {
+        setCount((c) => c + 1);
+      }}
+    >
+      App {props.name}
+      <p>{count}</p>
+    </div>
+  );
 };
 
 const element = <App name="zhangsan" />;
 
-const root = document.getElementById('root');
+const root = document.getElementById("root");
 DidactDom.render(element, root);

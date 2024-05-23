@@ -9,15 +9,15 @@ let deletions = null; // 要删除的节点
 
 function createDom(fiber) {
   const dom =
-    fiber.type === 'TEXT_ELEMENT'
-      ? document.createTextNode('')
+    fiber.type === "TEXT_ELEMENT"
+      ? document.createTextNode("")
       : document.createElement(fiber.type);
   updateDom(dom, {}, fiber.props);
   return dom;
 }
-const isProtype = (key) => key !== 'children';
-const isEvent = (key) => key.startsWith('on');
-const isNew = (key) => (prevProps, nextProps) =>
+const isProtype = (key) => key !== "children";
+const isEvent = (key) => key.startsWith("on");
+const isNew = (prevProps, nextProps) => (key) =>
   prevProps[key] !== nextProps[key];
 function updateDom(dom, prevProps, nextProps) {
   // 添加属性
@@ -40,7 +40,7 @@ function updateDom(dom, prevProps, nextProps) {
     .filter(isProtype)
     .filter((key) => !(key in nextProps))
     .forEach((key) => {
-      dom[key] = '';
+      dom[key] = "";
     });
   // 移除事件监听器
   Object.keys(prevProps)
@@ -53,21 +53,45 @@ function updateDom(dom, prevProps, nextProps) {
 }
 
 function commitRoot() {
+  deletions.forEach(commitWork);
   commitWork(wipRoot.child);
+  currentRoot = wipRoot;
   wipRoot = null;
 }
 
 function commitWork(fiber) {
   if (!fiber) return;
+
+  /**
+   * 这里主要为解决函数组件和类组件的存在
+   * 这俩组件会导致 dom 为 null
+   * 因为这俩组件的fiber只是个占位符
+   * 所以只需要将组件child的dom放到父父fiber的dom上即可
+   */
   let domParentFiber = fiber.parent;
   while (!domParentFiber.dom) {
     domParentFiber = domParentFiber.parent;
   }
 
   const domParent = domParentFiber.dom;
-  domParent.appendChild(fiber.dom);
+  if (fiber.effectTag === "PLACEMENT" && fiber.dom !== null) {
+    domParent.appendChild(fiber.dom);
+  } else if (fiber.effectTag === "UPDATE" && fiber.dom !== null) {
+    updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+  } else if (fiber.effectTag === "DELETION") {
+    // domParent.removeChild(fiber.dom);
+    commitDeletion(fiber, domParent);
+  }
   commitWork(fiber.child);
   commitWork(fiber.sibling);
+}
+
+function commitDeletion(fiber, domParent) {
+  if (fiber.dom) {
+    domParent.removeChild(fiber.dom);
+  } else {
+    commitDeletion(fiber.child, domParent);
+  }
 }
 
 /*
@@ -115,9 +139,49 @@ function performUnitOfWork(fiber) {
   }
 }
 
+let wipFiber = null; // 当前正在进行的fiber => useState
+let hookIndex = null; // 当前useState的索引
+
 function updateFunctionComponent(fiber) {
+  wipFiber = fiber;
+  hookIndex = 0;
+  wipFiber.hooks = [];
   const element = fiber.type(fiber.props);
   reconcileChildren(fiber, [element]);
+}
+
+function _useState(initValue) {
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+  const hook = {
+    state: oldHook ? oldHook.state : initValue,
+    queue: [],
+  };
+
+  const actions = oldHook ? oldHook.queue : [];
+  actions.forEach((action) => {
+    hook.state = action(hook.state);
+  });
+
+  const setState = (action) => {
+    // 执行setState后,将他存到队列中(这里使用的是一个数组)
+    // 然后重新渲染
+    // 渲染时,进入 useState 方法,然后执行上一次存储的setState
+    hook.queue.push(action);
+    wipRoot = {
+      dom: currentRoot.dom,
+      props: currentRoot.props,
+      alternate: currentRoot,
+    };
+    nextUnitorWork = wipRoot;
+    deletions = [];
+  };
+
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return [hook.state, setState];
 }
 
 function updateHostComponent(fiber) {
@@ -131,15 +195,46 @@ function updateHostComponent(fiber) {
 
 function reconcileChildren(wipFiber, elements) {
   let index = 0; // 索引
+  let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
   let prevSibling = null; // 上一个兄弟fiber
-  while (index < elements.length) {
+  while (index < elements.length || oldFiber != null) {
     const element = elements[index];
-    const newFiber = {
-      type: element.type,
-      props: element.props,
-      dom: null,
-      parent: wipFiber,
-    };
+    let newFiber = null;
+    const sameType = oldFiber && element && element.type === oldFiber.type;
+    if (sameType) {
+      newFiber = {
+        type: oldFiber.type,
+        props: element.props,
+        dom: oldFiber.dom,
+        parent: wipFiber,
+        alternate: oldFiber,
+        effectTag: "UPDATE",
+      };
+    }
+    if (element && !sameType) {
+      newFiber = {
+        type: element.type,
+        props: element.props,
+        dom: null,
+        parent: wipFiber,
+        alternate: null,
+        effectTag: "PLACEMENT",
+      };
+    }
+    if (oldFiber && !sameType) {
+      oldFiber.effectTag = "DELETION";
+      deletions.push(oldFiber);
+    }
+
+    if (oldFiber) {
+      oldFiber = oldFiber.sibling;
+    }
+    // const newFiber = {
+    //   type: element.type,
+    //   props: element.props,
+    //   dom: null,
+    //   parent: wipFiber,
+    // };
     // fiber结构,子级不是一个数组来存储,子级就有一个,其他子级都是第一个子级的兄弟fiber
     if (index === 0) {
       wipFiber.child = newFiber;
@@ -158,8 +253,10 @@ function createRoot(element, container) {
     props: {
       children: [element],
     },
+    alternate: currentRoot,
   };
   nextUnitorWork = wipRoot;
+  deletions = [];
 }
 
-export { createRoot };
+export { createRoot, _useState };
