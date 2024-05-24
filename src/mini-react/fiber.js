@@ -9,14 +9,14 @@ let deletions = null; // 要删除的节点
 
 function createDom(fiber) {
   const dom =
-    fiber.type === "TEXT_ELEMENT"
-      ? document.createTextNode("")
+    fiber.type === 'TEXT_ELEMENT'
+      ? document.createTextNode('')
       : document.createElement(fiber.type);
   updateDom(dom, {}, fiber.props);
   return dom;
 }
-const isProtype = (key) => key !== "children";
-const isEvent = (key) => key.startsWith("on");
+const isProtype = (key) => key !== 'children';
+const isEvent = (key) => key.startsWith('on');
 const isNew = (prevProps, nextProps) => (key) =>
   prevProps[key] !== nextProps[key];
 function updateDom(dom, prevProps, nextProps) {
@@ -40,7 +40,7 @@ function updateDom(dom, prevProps, nextProps) {
     .filter(isProtype)
     .filter((key) => !(key in nextProps))
     .forEach((key) => {
-      dom[key] = "";
+      dom[key] = '';
     });
   // 移除事件监听器
   Object.keys(prevProps)
@@ -57,6 +57,17 @@ function commitRoot() {
   commitWork(wipRoot.child);
   currentRoot = wipRoot;
   wipRoot = null;
+  // 这里就是为什么useEffect更新状态后,会先执行销毁后那个回调了,并且里面打印的state都是上一次的数据
+  // 主要是因为在函数组件中,每次都要给hooks这个数组情况 wipFiber.hooks = []
+  // 然后在重新push新的hook,每次重新渲染后这个数组及其里面的对象的内存地址就发生了变化
+  // 在然后就是useEffect第一次的时候已经把第一次的hook对象传递过来了
+  // 并且将 destory 函数存储起来,当第二次在提交到屏幕的时候,才会执行第一次的destory
+  pendingEffects.forEach((effect) => {
+    const destory = effect.fn();
+    if (destory) {
+      destoryEffects[effect.key] = destory;
+    }
+  });
 }
 
 function commitWork(fiber) {
@@ -74,11 +85,11 @@ function commitWork(fiber) {
   }
 
   const domParent = domParentFiber.dom;
-  if (fiber.effectTag === "PLACEMENT" && fiber.dom !== null) {
+  if (fiber.effectTag === 'PLACEMENT' && fiber.dom !== null) {
     domParent.appendChild(fiber.dom);
-  } else if (fiber.effectTag === "UPDATE" && fiber.dom !== null) {
+  } else if (fiber.effectTag === 'UPDATE' && fiber.dom !== null) {
     updateDom(fiber.dom, fiber.alternate.props, fiber.props);
-  } else if (fiber.effectTag === "DELETION") {
+  } else if (fiber.effectTag === 'DELETION') {
     // domParent.removeChild(fiber.dom);
     commitDeletion(fiber, domParent);
   }
@@ -141,13 +152,48 @@ function performUnitOfWork(fiber) {
 
 let wipFiber = null; // 当前正在进行的fiber => useState
 let hookIndex = null; // 当前useState的索引
+let pendingEffects = []; // 存储effect
+let destoryEffects = {}; // 销毁effect
 
 function updateFunctionComponent(fiber) {
   wipFiber = fiber;
   hookIndex = 0;
   wipFiber.hooks = [];
+  pendingEffects = [];
   const element = fiber.type(fiber.props);
   reconcileChildren(fiber, [element]);
+  wipFiber.hooks
+    .filter((o) => o.tag === 'EFFECT')
+    .forEach((hook, key) => {
+      const oldHook =
+        wipFiber.alternate &&
+        wipFiber.alternate.hooks &&
+        wipFiber.alternate.hooks.filter((o) => o.tag === 'EFFECT')[key];
+      if (hook.dept?.length === 0 && !oldHook) {
+        // 执行挂载后
+        pendingEffects.push({
+          fn: hook.fn,
+          key,
+        });
+      } else if (
+        /**
+         * 1. 如果没有穿第二个参数
+         * 2. 第二次渲染后的dept不等于第一次的dept
+         * 3. 依赖数组value发送变化
+         */
+        !hook.dept ||
+        hook?.dept?.length !== oldHook?.dept?.length ||
+        hook.dept.filter(
+          (_, index) => hook.dept?.[index] !== oldHook.dept?.[index]
+        ).length
+      ) {
+        pendingEffects.push({
+          fn: hook.fn,
+          key,
+        });
+        destoryEffects[key]?.();
+      }
+    });
 }
 
 function _useState(initValue) {
@@ -162,7 +208,11 @@ function _useState(initValue) {
 
   const actions = oldHook ? oldHook.queue : [];
   actions.forEach((action) => {
-    hook.state = action(hook.state);
+    if (action instanceof Function) {
+      hook.state = action(hook.state);
+    } else {
+      hook.state = action;
+    }
   });
 
   const setState = (action) => {
@@ -184,6 +234,20 @@ function _useState(initValue) {
   return [hook.state, setState];
 }
 
+function _useEffect(fn, dept) {
+  /**
+   * 参考 useState 的设计实现
+   */
+  const hook = {
+    tag: 'EFFECT',
+    fn,
+    dept,
+  };
+
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+}
+
 function updateHostComponent(fiber) {
   if (!fiber.dom) {
     fiber.dom = createDom(fiber);
@@ -195,8 +259,12 @@ function updateHostComponent(fiber) {
 
 function reconcileChildren(wipFiber, elements) {
   let index = 0; // 索引
+  /*
+   重新渲染后==>
+    第一次是 #root > div,返回 alternate:div
+    第二次是 div > app ....
+  */
   let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
-  console.log(wipFiber);
   let prevSibling = null; // 上一个兄弟fiber
   while (index < elements.length || oldFiber != null) {
     const element = elements[index];
@@ -209,7 +277,7 @@ function reconcileChildren(wipFiber, elements) {
         dom: oldFiber.dom,
         parent: wipFiber,
         alternate: oldFiber,
-        effectTag: "UPDATE",
+        effectTag: 'UPDATE',
       };
     }
     if (element && !sameType) {
@@ -219,11 +287,11 @@ function reconcileChildren(wipFiber, elements) {
         dom: null,
         parent: wipFiber,
         alternate: null,
-        effectTag: "PLACEMENT",
+        effectTag: 'PLACEMENT',
       };
     }
     if (oldFiber && !sameType) {
-      oldFiber.effectTag = "DELETION";
+      oldFiber.effectTag = 'DELETION';
       deletions.push(oldFiber);
     }
 
@@ -260,4 +328,4 @@ function createRoot(element, container) {
   deletions = [];
 }
 
-export { createRoot, _useState };
+export { createRoot, _useState, _useEffect };

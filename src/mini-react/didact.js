@@ -1,11 +1,11 @@
-import { _useState } from "./fiber";
+import { _useState, _useEffect } from './fiber';
 function createElement(type, props, ...children) {
   return {
     type,
     props: {
       ...props,
       children: children.map((child) =>
-        typeof child === "object" ? child : createTextElement(child)
+        typeof child === 'object' ? child : createTextElement(child)
       ),
     },
   };
@@ -13,7 +13,7 @@ function createElement(type, props, ...children) {
 
 function createTextElement(text) {
   return {
-    type: "TEXT_ELEMENT",
+    type: 'TEXT_ELEMENT',
     props: {
       nodeValue: text,
       children: [],
@@ -25,9 +25,14 @@ function useState(initValue) {
   return _useState(initValue);
 }
 
+function useEffect(fn, dept) {
+  _useEffect(fn, dept);
+}
+
 const Didact = {
   createElement,
   useState,
+  useEffect,
 };
 
 export default Didact;
