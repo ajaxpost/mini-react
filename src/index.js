@@ -1,6 +1,15 @@
 import Didact from './mini-react/didact';
 import DidactDom from './mini-react/didact-dom';
 
+const todo = [
+  {
+    title: '标题1',
+  },
+  {
+    title: '标题2',
+  },
+];
+
 const App = (props) => {
   const [count, setCount] = Didact.useState(1);
   const [num, setNum] = Didact.useState(1);
@@ -23,6 +32,9 @@ const App = (props) => {
       App {props.name}
       <p>{count}</p>
       <p>num: {num}</p>
+      {todo.map((item) => {
+        return <span key={item.title}>{item.title}</span>;
+      })}
     </div>
   );
 };

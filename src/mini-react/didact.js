@@ -4,9 +4,11 @@ function createElement(type, props, ...children) {
     type,
     props: {
       ...props,
-      children: children.map((child) =>
-        typeof child === 'object' ? child : createTextElement(child)
-      ),
+      children: children
+        .flat() // 修复扁平化问题
+        .map((child) =>
+          typeof child === 'object' ? child : createTextElement(child)
+        ),
     },
   };
 }
