@@ -62,6 +62,9 @@ function commitRoot() {
   // 然后在重新push新的hook,每次重新渲染后这个数组及其里面的对象的内存地址就发生了变化
   // 在然后就是useEffect第一次的时候已经把第一次的hook对象传递过来了
   // 并且将 destory 函数存储起来,当第二次在提交到屏幕的时候,才会执行第一次的destory
+  // 可能你还有有疑问?
+  // 为什么将第一次的destory存储起来,在第二次提交的时候执行会取的旧值呢?难道不一直应该是新的数据吗?
+  // 因为 destory 是在一个函数中返回的一个函数,你将他存起来,在第二次访问的时候他的作用域其实还是上一次的,也是用到了闭包的特性
   pendingEffects.forEach((effect) => {
     const destory = effect.fn();
     if (destory) {
