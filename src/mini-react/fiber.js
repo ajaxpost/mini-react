@@ -58,13 +58,54 @@ function commitRoot() {
   currentRoot = wipRoot;
   wipRoot = null;
   // 这里就是为什么useEffect更新状态后,会先执行销毁后那个回调了,并且里面打印的state都是上一次的数据
-  // 主要是因为在函数组件中,每次都要给hooks这个数组情况 wipFiber.hooks = []
-  // 然后在重新push新的hook,每次重新渲染后这个数组及其里面的对象的内存地址就发生了变化
   // 在然后就是useEffect第一次的时候已经把第一次的hook对象传递过来了
   // 并且将 destory 函数存储起来,当第二次在提交到屏幕的时候,才会执行第一次的destory
   // 可能你还有有疑问?
   // 为什么将第一次的destory存储起来,在第二次提交的时候执行会取的旧值呢?难道不一直应该是新的数据吗?
-  // 因为 destory 是在一个函数中返回的一个函数,你将他存起来,在第二次访问的时候他的作用域其实还是上一次的,也是用到了闭包的特性
+  /*
+    因为useState返回的是一个数组 => [hook.state,xxxx] 
+    所以他在执行useState的时候就已经把值确定了 => [10,xxx]
+    然后执行 useEffect 把 callback 和 destory 存起来,提交到屏幕的时候,执行第一次的 callback
+    在然后 重新渲染的时候,执行第一次的 destory,因为 destory 里面打印了第一次的state的值,所以第一次的state
+    在内存中是不会被销毁的,哪怕新的state来了,也不会被销毁,所以是旧值
+
+    证据: 现在的这个代码,每次重新渲染的时候会把 pendingEffects 清空,所以useEffect每次重新渲染的时候获取的都是最新的callback,获取最新的state
+         如果你在第二次重新渲染的时候不清空 pendingEffects,就会发现,callback 会执行两次,第一次是旧的callback,第二次是新的callback
+         那么旧的callback就如上面所说,他获取的值也是旧的,因为callback在创建的时候已经和state绑定了
+
+    JS写的例子可以测试一下:
+      const state = {
+        num: 0,
+      };
+      const destory = [];
+      function useState() {
+        return state.num;
+      }
+
+      function useEffect(cb) {
+        const d = cb();
+        destory.push(d);
+      }
+
+      function setState() {
+        state.num = 10;
+        destory.forEach((d) => d());
+      }
+
+      const data = useState();
+
+      useEffect(() => {
+        console.log('effect1', data);
+        return () => {
+          console.log('destory1', data);
+        };
+      });
+
+      setTimeout(() => {
+        setState(1);
+        console.log(state.num, 'new');
+      }, 1000);
+  */
   pendingEffects.forEach((effect) => {
     const destory = effect.fn();
     if (destory) {
@@ -234,7 +275,7 @@ function _useState(initValue) {
 
   wipFiber.hooks.push(hook);
   hookIndex++;
-  return [hook.state, setState];
+  return [hook.state, setState, Date.now()];
 }
 
 function _useEffect(fn, dept) {

@@ -15,7 +15,7 @@ const App = (props) => {
   const [num, setNum] = Didact.useState(1);
 
   Didact.useEffect(() => {
-    console.log('effect 执行了', count);
+    console.log('effect 执行了');
     return () => {
       console.log(count, '销毁');
     };
